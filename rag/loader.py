@@ -3,6 +3,7 @@ Document loading utilities.
 
 Supports:
 - PDF
+- Markdown
 - Multiple PDFs
 - Web pages
 - Multiple web pages
@@ -15,7 +16,10 @@ import os
 from pathlib import Path
 
 from langchain_core.documents import Document
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    TextLoader,
+)
 
 from rag.config import Config
 from rag.exceptions import (
@@ -90,13 +94,54 @@ class DocumentLoader:
 
         documents = loader.load()
 
-        # Standardize metadata
         for document in documents:
             document.metadata["document_type"] = "pdf"
             document.metadata["file_name"] = pdf_path.name
 
         logger.info(
             "Loaded %s pages.",
+            len(documents),
+        )
+
+        return cls._validate_documents(
+            documents
+        )
+
+    # ---------------------------------------------------------
+    # Markdown
+    # ---------------------------------------------------------
+
+    @classmethod
+    def load_markdown(
+        cls,
+        md_path: str | Path,
+    ) -> list[Document]:
+
+        md_path = Path(md_path)
+
+        if not md_path.exists():
+            raise DocumentNotFoundError(
+                f"Markdown file not found: {md_path}"
+            )
+
+        logger.info(
+            "Loading Markdown: %s",
+            md_path,
+        )
+
+        loader = TextLoader(
+            str(md_path),
+            encoding="utf-8",
+        )
+
+        documents = loader.load()
+
+        for document in documents:
+            document.metadata["document_type"] = "markdown"
+            document.metadata["file_name"] = md_path.name
+
+        logger.info(
+            "Loaded %s markdown document(s).",
             len(documents),
         )
 
@@ -122,7 +167,33 @@ class DocumentLoader:
             )
 
         logger.info(
-            "Loaded %s total pages.",
+            "Loaded %s total PDF pages.",
+            len(all_documents),
+        )
+
+        return cls._validate_documents(
+            all_documents
+        )
+
+    # ---------------------------------------------------------
+    # Multiple Markdown Files
+    # ---------------------------------------------------------
+
+    @classmethod
+    def load_markdowns(
+        cls,
+        markdowns: list[str | Path],
+    ) -> list[Document]:
+
+        all_documents: list[Document] = []
+
+        for markdown in markdowns:
+            all_documents.extend(
+                cls.load_markdown(markdown)
+            )
+
+        logger.info(
+            "Loaded %s markdown document(s).",
             len(all_documents),
         )
 
@@ -154,7 +225,6 @@ class DocumentLoader:
 
         documents = crawler.crawl(url)
 
-        # Standardize metadata
         for document in documents:
 
             document.metadata.setdefault(
@@ -164,7 +234,10 @@ class DocumentLoader:
 
             document.metadata.setdefault(
                 "url",
-                document.metadata.get("source", url),
+                document.metadata.get(
+                    "source",
+                    url,
+                ),
             )
 
         logger.info(
@@ -225,6 +298,14 @@ class DocumentLoader:
                     )
                 )
 
+            elif source_type == "markdown":
+
+                documents.extend(
+                    cls.load_markdown(
+                        source["path"]
+                    )
+                )
+
             elif source_type == "web":
 
                 documents.extend(
@@ -266,14 +347,32 @@ class DocumentLoader:
                 f"Directory not found: {directory}"
             )
 
+        documents: list[Document] = []
+
         pdfs = sorted(
             directory.glob("*.pdf")
         )
 
-        if not pdfs:
+        markdowns = sorted(
+            directory.glob("*.md")
+        )
 
-            raise DocumentNotFoundError(
-                "No PDF files found."
+        if pdfs:
+            documents.extend(
+                cls.load_pdfs(pdfs)
             )
 
-        return cls.load_pdfs(pdfs)
+        if markdowns:
+            documents.extend(
+                cls.load_markdowns(markdowns)
+            )
+
+        if not documents:
+
+            raise DocumentNotFoundError(
+                "No supported documents found."
+            )
+
+        return cls._validate_documents(
+            documents
+        )

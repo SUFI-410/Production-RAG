@@ -32,7 +32,9 @@ class CLI:
 
             print("\n📂 Loading existing Chroma database...\n")
 
-            logger.info("Loading existing Chroma database.")
+            logger.info(
+                "Loading existing Chroma database."
+            )
 
             self.app.load_existing()
 
@@ -47,29 +49,32 @@ class CLI:
         if choice != "1":
             raise SystemExit
 
-        pdf_directory = Path("data/pdfs")
+        docs_directory = Path("data/docs")
 
-        if not pdf_directory.exists():
+        if not docs_directory.exists():
 
-            print("\nMissing directory: data/pdfs\n")
+            print("\nMissing directory: data/docs\n")
 
             raise SystemExit
 
-        pdfs = sorted(pdf_directory.glob("*.pdf"))
+        markdown_files = sorted(
+            docs_directory.glob("*.md")
+        )
 
-        if not pdfs:
+        if not markdown_files:
 
-            print("\nNo PDF files found.\n")
+            print("\nNo Markdown files found.\n")
 
             raise SystemExit
 
         sources: list[dict] = []
 
-        for pdf in pdfs:
+        for markdown in markdown_files:
+
             sources.append(
                 {
-                    "type": "pdf",
-                    "path": str(pdf),
+                    "type": "markdown",
+                    "path": str(markdown),
                 }
             )
 
@@ -81,10 +86,12 @@ class CLI:
         )
 
         print(
-            f"\nBuilding knowledge base from {len(pdfs)} PDF(s) and TechFury website...\n"
+            f"\nBuilding knowledge base from {len(markdown_files)} Markdown document(s) and TechFury website...\n"
         )
 
-        self.app.initialize_sources(sources)
+        self.app.initialize_sources(
+            sources
+        )
 
     # ---------------------------------------------------------
     # Menu
@@ -112,7 +119,10 @@ class CLI:
 
             command_lower = command.lower()
 
-            if command_lower in {"quit", "exit"}:
+            if command_lower in {
+                "quit",
+                "exit",
+            }:
 
                 print("\nGoodbye!\n")
 
@@ -172,7 +182,9 @@ class CLI:
 
                 self.self_filter = None
 
-                print("\nSearching all indexed documents.\n")
+                print(
+                    "\nSearching all indexed documents.\n"
+                )
 
                 continue
 
