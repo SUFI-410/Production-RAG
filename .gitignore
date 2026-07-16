@@ -1,0 +1,18 @@
+# Environment variables
+.env
+
+# Chroma database directory
+chroma_db/
+
+# Log files and directories
+logs/
+*.log
+
+# Python cache directories
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Python virtual environment
+.venv/
