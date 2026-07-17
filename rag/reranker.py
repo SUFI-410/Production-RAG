@@ -78,6 +78,26 @@ class Reranker:
             reverse=True,
         )
 
+        logger.info("=" * 60)
+        logger.info("Cross-Encoder Ranking")
+        logger.info("=" * 60)
+
+        for index, (score, document) in enumerate(
+            ranked[:top_k],
+            start=1,
+        ):
+            logger.info(
+                "[%s] %.6f | %s",
+                index,
+                float(score),
+                document.metadata.get(
+                    "source",
+                    "Unknown",
+                ),
+            )
+
+        logger.info("=" * 60)
+
         results = [
             document
             for _, document in ranked[:top_k]
@@ -89,53 +109,3 @@ class Reranker:
         )
 
         return results
-
-    # ---------------------------------------------------------
-    # Preview Scores
-    # ---------------------------------------------------------
-
-    def preview(
-        self,
-        question: str,
-        documents: list[Document],
-        limit: int = 5,
-    ) -> None:
-
-        if not documents:
-            return
-
-        pairs = [
-            (
-                question,
-                document.page_content,
-            )
-            for document in documents
-        ]
-
-        scores = self.model.predict(
-            pairs
-        )
-
-        logger.info("=" * 60)
-        logger.info("Reranker Scores")
-        logger.info("=" * 60)
-
-        for index, (score, document) in enumerate(
-            zip(scores, documents),
-            start=1,
-        ):
-
-            if index > limit:
-                break
-
-            logger.info(
-                "[%s] %.4f | %s",
-                index,
-                float(score),
-                document.metadata.get(
-                    "source",
-                    "Unknown",
-                ),
-            )
-
-        logger.info("=" * 60)
