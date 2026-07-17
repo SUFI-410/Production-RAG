@@ -121,16 +121,20 @@ class VectorStoreManager:
     # Retriever
     # ---------------------------------------------------------
 
-    def as_retriever(self, search_filter: dict | None = None):
+    def as_retriever(
+        self,
+        metadata_filter: dict[str, str] | None = None,
+    ):
         """
         Return an MMR retriever.
 
         Args:
-            search_filter:
+            metadata_filter:
                 Optional Chroma metadata filter.
+
                 Example:
                     {"source": "https://thetechfury.com/"}
-        """
+            """
         if self.vectorstore is None:
             raise VectorStoreNotInitializedError(
                 "Vector database has not been initialized."
@@ -142,8 +146,8 @@ class VectorStoreManager:
             "lambda_mult": Config.LAMBDA_MULT,
         }
 
-        if search_filter:
-            search_kwargs["filter"] = search_filter
+        if metadata_filter is not None:
+            search_kwargs["filter"] = metadata_filter
 
         return self.vectorstore.as_retriever(
             search_type=Config.SEARCH_TYPE,

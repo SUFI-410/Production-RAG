@@ -31,14 +31,14 @@ class RAGApplication:
 
     def _create_chain(
         self,
-        search_filter: dict | None = None,
+        metadata_filter: dict[str, str] | None = None,
     ) -> RAGChain:
         """
         Create a RAG chain using the requested metadata filter.
         """
 
         retriever = self.vector_manager.as_retriever(
-            search_filter=search_filter,
+            metadata_filter=metadata_filter,
         )
 
         return RAGChain(retriever)
@@ -184,7 +184,7 @@ class RAGApplication:
     def ask(
         self,
         question: str,
-        search_filter: dict | None = None,
+        metadata_filter: dict[str, str] | None = None,
     ) -> str:
         """
         Return only the generated answer.
@@ -197,8 +197,8 @@ class RAGApplication:
 
         chain = (
             self.chain
-            if search_filter is None
-            else self._create_chain(search_filter)
+            if metadata_filter is None
+            else self._create_chain(metadata_filter)
         )
 
         return chain.invoke(question)
@@ -206,7 +206,7 @@ class RAGApplication:
     def ask_with_sources(
         self,
         question: str,
-        search_filter: dict | None = None,
+        metadata_filter: dict[str, str] | None = None,
     ) -> dict:
         """
         Return answer plus retrieved documents.
@@ -219,8 +219,8 @@ class RAGApplication:
 
         chain = (
             self.chain
-            if search_filter is None
-            else self._create_chain(search_filter)
+            if metadata_filter is None
+            else self._create_chain(metadata_filter)
         )
 
         return chain.ask(question)

@@ -20,7 +20,7 @@ class CLI:
 
     def __init__(self) -> None:
         self.app = RAGApplication()
-        self.self_filter: dict | None = None
+        self.metadata_filter: dict[str, str] | None = None
 
     # ---------------------------------------------------------
     # Initialization
@@ -166,7 +166,7 @@ class CLI:
 
                 source = command[4:].strip()
 
-                self.self_filter = {
+                self.metadata_filter = {
                     "source": source,
                 }
 
@@ -180,7 +180,7 @@ class CLI:
 
             if command_lower == "use all":
 
-                self.self_filter = None
+                self.metadata_filter = None
 
                 print(
                     "\nSearching all indexed documents.\n"
@@ -192,7 +192,7 @@ class CLI:
 
                 result = self.app.ask_with_sources(
                     question=command,
-                    search_filter=self.self_filter,
+                    metadata_filter=self.metadata_filter,
                 )
 
                 print("\nAnswer\n")
