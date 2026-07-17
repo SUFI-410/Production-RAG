@@ -16,6 +16,7 @@ import shutil
 
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
+from rag.bm25 import BM25Retriever
 
 from rag.config import Config
 from rag.embeddings import EmbeddingFactory
@@ -37,6 +38,7 @@ class VectorStoreManager:
     def __init__(self) -> None:
         self.embeddings = EmbeddingFactory.create()
         self.vectorstore: Chroma | None = None
+        self.bm25 = BM25Retriever()
 
     # ---------------------------------------------------------
     # Private
@@ -65,6 +67,7 @@ class VectorStoreManager:
         splitter = DocumentSplitter()
         chunks = splitter.split(documents)
         splitter.statistics(chunks)
+        self.bm25.build(chunks)
 
         self.vectorstore = Chroma.from_documents(
             documents=chunks,
@@ -197,6 +200,7 @@ class VectorStoreManager:
 
         splitter = DocumentSplitter()
         chunks = splitter.split(documents)
+        self.bm25.build(chunks)
 
         self.vectorstore.add_documents(chunks)
         self.persist()

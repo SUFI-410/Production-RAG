@@ -15,13 +15,13 @@ from operator import itemgetter
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_openai import ChatOpenAI
 
 from rag.config import Config
+from rag.logger import get_logger
 from rag.prompt import PromptFactory
 from rag.utils import format_documents
-from rag.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -38,7 +38,6 @@ class RAGChain:
         self.llm = ChatOpenAI(
             model=Config.CHAT_MODEL,
             temperature=Config.TEMPERATURE,
-            api_key=Config.OPENAI_API_KEY,
         )
 
         self.prompt = PromptFactory.create()
@@ -46,16 +45,32 @@ class RAGChain:
         self.chain = self._build_chain()
 
     # ---------------------------------------------------------
-    # Context
+    # Context Preparation
     # ---------------------------------------------------------
 
     @staticmethod
-    def _documents_to_context(
-        documents: list[Document],
+    def _prepare_context(
+        inputs: dict,
     ) -> str:
         """
-        Convert retrieved documents into a single context string.
+        Prepare the context for the LLM.
+
+        Parameters
+        ----------
+        inputs:
+            {
+                "question": str,
+                "documents": list[Document]
+            }
+
+        Currently the question is unused.
+
+        In the next step it will be used by the
+        Cross-Encoder reranker before formatting.
         """
+
+        documents: list[Document] = inputs["documents"]
+
         return format_documents(documents)
 
     # ---------------------------------------------------------
@@ -65,13 +80,16 @@ class RAGChain:
     def _build_chain(self):
 
         context_chain = (
-            self.retriever
-            | RunnableLambda(self._documents_to_context)
+            RunnableParallel(
+                question=itemgetter("question"),
+                documents=itemgetter("question") | self.retriever,
+            )
+            | RunnableLambda(self._prepare_context)
         )
 
         return (
             {
-                "context": itemgetter("question") | context_chain,
+                "context": context_chain,
                 "question": itemgetter("question"),
             }
             | self.prompt

@@ -1,17 +1,18 @@
 """
 Retriever utilities.
 
-Responsible for retrieving relevant documents from
-the vector store.
+Supports:
+- Vector retrieval
+- Hybrid retrieval
+- Reciprocal Rank Fusion
 """
 
 from __future__ import annotations
 
 from langchain_core.documents import Document
 
-from rag.exceptions import (
-    NoDocumentsRetrievedError,
-)
+from rag.exceptions import NoDocumentsRetrievedError
+from rag.fusion import reciprocal_rank_fusion
 from rag.logger import get_logger
 
 logger = get_logger(__name__)
@@ -19,12 +20,16 @@ logger = get_logger(__name__)
 
 class Retriever:
     """
-    Wrapper around a LangChain retriever.
+    Production retriever wrapper.
     """
 
-    def __init__(self, retriever):
-
-        self._retriever = retriever
+    def __init__(
+        self,
+        vector_retriever,
+        hybrid_search=None,
+    ):
+        self.vector_retriever = vector_retriever
+        self.hybrid_search = hybrid_search
 
     # ---------------------------------------------------------
     # Retrieve
@@ -34,18 +39,38 @@ class Retriever:
         self,
         question: str,
     ) -> list[Document]:
-        """
-        Retrieve relevant documents.
-        """
 
         logger.info(
-            "Searching for: %s",
+            "Searching: %s",
             question,
         )
 
-        documents = self._retriever.invoke(
+        # -----------------------------
+        # Vector Search
+        # -----------------------------
+
+        vector_docs = self.vector_retriever.invoke(
             question
         )
+
+        # -----------------------------
+        # Hybrid Search
+        # -----------------------------
+
+        if self.hybrid_search is not None:
+
+            bm25_docs = self.hybrid_search.search(
+                question
+            )
+
+            documents = reciprocal_rank_fusion(
+                vector_docs,
+                bm25_docs,
+            )
+
+        else:
+
+            documents = vector_docs
 
         if not documents:
 
@@ -69,22 +94,19 @@ class Retriever:
         documents: list[Document],
         limit: int = 3,
     ) -> None:
-        """
-        Preview retrieved documents.
-        """
 
         logger.info("=" * 60)
         logger.info("Retrieved Context")
         logger.info("=" * 60)
 
-        for index, document in enumerate(
+        for i, document in enumerate(
             documents[:limit],
             start=1,
         ):
 
             logger.info(
                 "[%s]\n%s\n",
-                index,
+                i,
                 document.page_content[:300],
             )
 
@@ -98,12 +120,9 @@ class Retriever:
     def sources(
         documents: list[Document],
     ) -> list[dict]:
-        """
-        Return unique document sources.
-        """
 
         seen = set()
-        result = []
+        results = []
 
         for document in documents:
 
@@ -117,18 +136,21 @@ class Retriever:
                 "-",
             )
 
-            key = (source, page)
+            key = (
+                source,
+                page,
+            )
 
             if key in seen:
                 continue
 
             seen.add(key)
 
-            result.append(
+            results.append(
                 {
                     "source": source,
                     "page": page,
                 }
             )
 
-        return result
+        return results
