@@ -21,6 +21,7 @@ from langchain_openai import ChatOpenAI
 from rag.config import Config
 from rag.logger import get_logger
 from rag.prompt import PromptFactory
+from rag.reranker import Reranker
 from rag.utils import format_documents
 
 logger = get_logger(__name__)
@@ -35,6 +36,8 @@ class RAGChain:
 
         self.retriever = retriever
 
+        self.reranker = Reranker()
+
         self.llm = ChatOpenAI(
             model=Config.CHAT_MODEL,
             temperature=Config.TEMPERATURE,
@@ -48,28 +51,27 @@ class RAGChain:
     # Context Preparation
     # ---------------------------------------------------------
 
-    @staticmethod
     def _prepare_context(
+        self,
         inputs: dict,
     ) -> str:
         """
         Prepare the context for the LLM.
 
-        Parameters
-        ----------
-        inputs:
-            {
-                "question": str,
-                "documents": list[Document]
-            }
-
-        Currently the question is unused.
-
-        In the next step it will be used by the
-        Cross-Encoder reranker before formatting.
+        Steps:
+        1. Receive retrieved documents.
+        2. Re-rank them using the Cross Encoder.
+        3. Keep the top documents.
+        4. Format them into the prompt context.
         """
 
+        question: str = inputs["question"]
         documents: list[Document] = inputs["documents"]
+
+        documents = self.reranker.rerank(
+            question=question,
+            documents=documents,
+        )
 
         return format_documents(documents)
 
