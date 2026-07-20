@@ -16,8 +16,9 @@ import shutil
 
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
-from rag.bm25 import BM25Retriever
 
+from rag.bm25 import BM25Retriever
+from rag.hybrid import HybridRetriever
 from rag.config import Config
 from rag.embeddings import EmbeddingFactory
 from rag.exceptions import (
@@ -67,6 +68,7 @@ class VectorStoreManager:
         splitter = DocumentSplitter()
         chunks = splitter.split(documents)
         splitter.statistics(chunks)
+
         self.bm25.build(chunks)
 
         self.vectorstore = Chroma.from_documents(
@@ -89,7 +91,9 @@ class VectorStoreManager:
         Load an existing Chroma database.
         """
         if not self.database_exists():
-            raise CollectionNotFoundError("No Chroma database found.")
+            raise CollectionNotFoundError(
+                "No Chroma database found."
+            )
 
         logger.info("Loading existing Chroma database...")
 
@@ -107,7 +111,10 @@ class VectorStoreManager:
     # Load or Create
     # ---------------------------------------------------------
 
-    def load_or_create(self, documents: list[Document]) -> Chroma:
+    def load_or_create(
+        self,
+        documents: list[Document],
+    ) -> Chroma:
         """
         Load existing database or create a new one.
         """
@@ -126,15 +133,10 @@ class VectorStoreManager:
         metadata_filter: dict[str, str] | None = None,
     ):
         """
-        Return an MMR retriever.
+        Return a Hybrid Retriever
+        (Chroma + BM25).
+        """
 
-        Args:
-            metadata_filter:
-                Optional Chroma metadata filter.
-
-                Example:
-                    {"source": "https://thetechfury.com/"}
-            """
         if self.vectorstore is None:
             raise VectorStoreNotInitializedError(
                 "Vector database has not been initialized."
@@ -149,9 +151,14 @@ class VectorStoreManager:
         if metadata_filter is not None:
             search_kwargs["filter"] = metadata_filter
 
-        return self.vectorstore.as_retriever(
+        chroma_retriever = self.vectorstore.as_retriever(
             search_type=Config.SEARCH_TYPE,
             search_kwargs=search_kwargs,
+        )
+
+        return HybridRetriever(
+            chroma_retriever=chroma_retriever,
+            bm25_retriever=self.bm25,
         )
 
     # ---------------------------------------------------------
@@ -182,8 +189,14 @@ class VectorStoreManager:
         Delete the Chroma database.
         """
         if Config.CHROMA_DIR.exists():
-            shutil.rmtree(Config.CHROMA_DIR, ignore_errors=True)
-            Config.CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.rmtree(
+                Config.CHROMA_DIR,
+                ignore_errors=True,
+            )
+            Config.CHROMA_DIR.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
 
             logger.info("Vector database removed.")
 
@@ -193,7 +206,10 @@ class VectorStoreManager:
     # Add Documents
     # ---------------------------------------------------------
 
-    def add_documents(self, documents: list[Document]) -> None:
+    def add_documents(
+        self,
+        documents: list[Document],
+    ) -> None:
         """
         Add new documents to an existing database.
         """
@@ -204,12 +220,17 @@ class VectorStoreManager:
 
         splitter = DocumentSplitter()
         chunks = splitter.split(documents)
+
         self.bm25.build(chunks)
 
         self.vectorstore.add_documents(chunks)
+
         self.persist()
 
-        logger.info("Added %s new chunk(s).", len(chunks))
+        logger.info(
+            "Added %s new chunk(s).",
+            len(chunks),
+        )
 
     # ---------------------------------------------------------
     # Persist
@@ -222,5 +243,6 @@ class VectorStoreManager:
         if self.vectorstore is None:
             return
 
-        # Modern langchain-chroma persists automatically.
-        logger.info("Database persistence handled automatically.")
+        logger.info(
+            "Database persistence handled automatically."
+        )
