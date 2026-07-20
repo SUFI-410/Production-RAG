@@ -5,7 +5,7 @@ Responsibilities:
 - Retrieve relevant documents
 - Build context
 - Invoke GPT model
-- Stream GPT responses
+- Maintain conversation memory
 - Return answer and sources
 """
 
@@ -20,6 +20,7 @@ from langchain_openai import ChatOpenAI
 
 from rag.config import Config
 from rag.logger import get_logger
+from rag.memory import ConversationMemory
 from rag.prompt import PromptFactory
 from rag.utils import format_documents
 
@@ -31,11 +32,16 @@ class RAGChain:
     Production Retrieval-Augmented Generation chain.
     """
 
-    def __init__(self, retriever, reranker):
+    def __init__(
+        self,
+        retriever,
+        reranker,
+        memory: ConversationMemory,
+    ):
 
         self.retriever = retriever
-
         self.reranker = reranker
+        self.memory = memory
 
         self.llm = ChatOpenAI(
             model=Config.CHAT_MODEL,
@@ -56,12 +62,6 @@ class RAGChain:
     ) -> str:
         """
         Prepare the context for the LLM.
-
-        Steps:
-        1. Receive retrieved documents.
-        2. Re-rank them using the Cross Encoder.
-        3. Keep the top documents.
-        4. Format them into the prompt context.
         """
 
         question: str = inputs["question"]
@@ -73,6 +73,20 @@ class RAGChain:
         )
 
         return format_documents(documents)
+
+    # ---------------------------------------------------------
+    # Conversation History
+    # ---------------------------------------------------------
+
+    def _history(
+        self,
+        _: dict,
+    ) -> str:
+        """
+        Return formatted conversation history.
+        """
+
+        return self.memory.formatted_history()
 
     # ---------------------------------------------------------
     # Build LCEL Chain
@@ -88,8 +102,11 @@ class RAGChain:
             | RunnableLambda(self._prepare_context)
         )
 
+        history_chain = RunnableLambda(self._history)
+
         return (
             {
+                "history": history_chain,
                 "context": context_chain,
                 "question": itemgetter("question"),
             }
@@ -118,6 +135,9 @@ class RAGChain:
             }
         )
 
+        self.memory.add_user_message(question)
+        self.memory.add_ai_message(answer)
+
         logger.info("Answer generated.")
 
         return answer
@@ -136,11 +156,18 @@ class RAGChain:
 
         logger.info("Streaming question: %s", question)
 
-        yield from self.chain.stream(
+        answer = ""
+
+        for chunk in self.chain.stream(
             {
                 "question": question,
             }
-        )
+        ):
+            answer += chunk
+            yield chunk
+
+        self.memory.add_user_message(question)
+        self.memory.add_ai_message(answer)
 
     # ---------------------------------------------------------
     # Retrieve Only

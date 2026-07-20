@@ -9,8 +9,9 @@ from pathlib import Path
 from rag.chain import RAGChain
 from rag.loader import DocumentLoader
 from rag.logger import get_logger
-from rag.vector_store import VectorStoreManager
+from rag.memory import ConversationMemory
 from rag.reranker import Reranker
+from rag.vector_store import VectorStoreManager
 
 logger = get_logger(__name__)
 
@@ -25,6 +26,8 @@ class RAGApplication:
         self.vector_manager = VectorStoreManager()
 
         self.reranker = Reranker()
+
+        self.memory = ConversationMemory()
 
         self.chain: RAGChain | None = None
 
@@ -44,7 +47,11 @@ class RAGApplication:
             metadata_filter=metadata_filter,
         )
 
-        return RAGChain(retriever=retriever, reranker=self.reranker)
+        return RAGChain(
+            retriever=retriever,
+            reranker=self.reranker,
+            memory=self.memory,
+        )
 
     # ---------------------------------------------------------
     # Initialization
