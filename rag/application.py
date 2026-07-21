@@ -10,6 +10,7 @@ from rag.chain import RAGChain
 from rag.loader import DocumentLoader
 from rag.logger import get_logger
 from rag.memory import ConversationMemory
+from rag.query_rewriter import QueryRewriter
 from rag.reranker import Reranker
 from rag.vector_store import VectorStoreManager
 
@@ -28,6 +29,8 @@ class RAGApplication:
         self.reranker = Reranker()
 
         self.memory = ConversationMemory()
+
+        self.query_rewriter = QueryRewriter()
 
         self.chain: RAGChain | None = None
 
@@ -109,9 +112,7 @@ class RAGApplication:
 
         logger.info("Initializing from mixed sources...")
 
-        documents = DocumentLoader.load_sources(
-            sources
-        )
+        documents = DocumentLoader.load_sources(sources)
 
         self.vector_manager.load_or_create(documents)
 
@@ -205,13 +206,30 @@ class RAGApplication:
                 "Application has not been initialized."
             )
 
+        history = self.memory.formatted_history()
+
+        rewritten_question = (
+            self.query_rewriter.rewrite(
+                question=question,
+                history=history,
+            )
+            if history.strip()
+            else question
+        )
+
         chain = (
             self.chain
             if metadata_filter is None
             else self._create_chain(metadata_filter)
         )
 
-        return chain.invoke(question)
+        # Retrieve documents ONCE
+        documents = chain.retrieve(rewritten_question)
+
+        return chain.invoke(
+            question=rewritten_question,
+            documents=documents,
+        )
 
     def ask_with_sources(
         self,
@@ -227,13 +245,30 @@ class RAGApplication:
                 "Application has not been initialized."
             )
 
+        history = self.memory.formatted_history()
+
+        rewritten_question = (
+            self.query_rewriter.rewrite(
+                question=question,
+                history=history,
+            )
+            if history.strip()
+            else question
+        )
+
         chain = (
             self.chain
             if metadata_filter is None
             else self._create_chain(metadata_filter)
         )
 
-        return chain.ask(question)
+        # Retrieve documents ONCE
+        documents = chain.retrieve(rewritten_question)
+
+        return chain.ask(
+            question=rewritten_question,
+            documents=documents,
+        )
 
     # ---------------------------------------------------------
     # Database

@@ -2,7 +2,6 @@
 Production RAG Chain using LCEL.
 
 Responsibilities:
-- Retrieve relevant documents
 - Build context
 - Invoke GPT model
 - Maintain conversation memory
@@ -97,7 +96,7 @@ class RAGChain:
         context_chain = (
             RunnableParallel(
                 question=itemgetter("question"),
-                documents=itemgetter("question") | self.retriever,
+                documents=itemgetter("documents"),
             )
             | RunnableLambda(self._prepare_context)
         )
@@ -122,6 +121,7 @@ class RAGChain:
     def invoke(
         self,
         question: str,
+        documents: list[Document],
     ) -> str:
         """
         Generate a complete answer.
@@ -132,6 +132,7 @@ class RAGChain:
         answer = self.chain.invoke(
             {
                 "question": question,
+                "documents": documents,
             }
         )
 
@@ -149,6 +150,7 @@ class RAGChain:
     def stream(
         self,
         question: str,
+        documents: list[Document],
     ):
         """
         Stream the generated answer chunk by chunk.
@@ -161,6 +163,7 @@ class RAGChain:
         for chunk in self.chain.stream(
             {
                 "question": question,
+                "documents": documents,
             }
         ):
             answer += chunk
@@ -190,14 +193,16 @@ class RAGChain:
     def ask(
         self,
         question: str,
+        documents: list[Document],
     ) -> dict:
         """
         Return both answer and retrieved documents.
         """
 
-        documents = self.retrieve(question)
-
-        answer = self.invoke(question)
+        answer = self.invoke(
+            question=question,
+            documents=documents,
+        )
 
         return {
             "question": question,
