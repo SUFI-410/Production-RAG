@@ -23,16 +23,37 @@ def format_documents(
     documents: list[Document],
 ) -> str:
     """
-    Convert retrieved documents into a single context string.
+    Convert retrieved documents into a numbered context string
+    for citation-aware prompting.
     """
 
     if not documents:
         return ""
 
-    return "\n\n------------------------------\n\n".join(
-        document.page_content.strip()
-        for document in documents
-        if document.page_content.strip()
+    sections: list[str] = []
+
+    for index, document in enumerate(documents, start=1):
+
+        content = document.page_content.strip()
+
+        if not content:
+            continue
+
+        source = source_name(document)
+        page = page_number(document)
+
+        sections.append(
+            f"""
+[{index}]
+Source: {source}
+Page: {page}
+
+{content}
+""".strip()
+        )
+
+    return "\n\n" + ("-" * 70).join(
+        f"\n\n{section}" for section in sections
     )
 
 
