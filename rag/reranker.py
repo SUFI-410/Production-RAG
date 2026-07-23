@@ -48,7 +48,7 @@ class Reranker:
         top_k: int | None = None,
     ) -> list[Document]:
         """
-        Rerank retrieved documents.
+        Rerank retrieved documents and discard irrelevant ones.
         """
 
         if not documents:
@@ -58,7 +58,7 @@ class Reranker:
             top_k = Config.RERANK_TOP_K
 
         logger.info(
-            "Reranking %s document(s)...",
+            "Reranking %d document(s)...",
             len(documents),
         )
 
@@ -70,13 +70,11 @@ class Reranker:
             for document in documents
         ]
 
-        scores = self.model.predict(
-            pairs
-        )
+        scores = self.model.predict(pairs)
 
         ranked = sorted(
             zip(scores, documents),
-            key=lambda x: x[0],
+            key=lambda x: float(x[0]),
             reverse=True,
         )
 
@@ -84,30 +82,51 @@ class Reranker:
         logger.info("Cross-Encoder Ranking")
         logger.info("=" * 60)
 
+        filtered_documents: list[Document] = []
+
         for index, (score, document) in enumerate(
-            ranked[:top_k],
+            ranked,
             start=1,
         ):
+            score = float(score)
+
+            # Save score into metadata
+            document.metadata["rerank_score"] = score
+
             logger.info(
-                "[%s] %.6f | %s",
+                "[%d] %.6f | %s",
                 index,
-                float(score),
+                score,
                 document.metadata.get(
                     "source",
                     "Unknown",
                 ),
             )
 
+            # Apply threshold
+            if score >= Config.RERANK_THRESHOLD:
+                filtered_documents.append(document)
+
         logger.info("=" * 60)
-
-        results = [
-            document
-            for _, document in ranked[:top_k]
-        ]
-
         logger.info(
-            "Returning top %s reranked document(s).",
-            len(results),
+            "Threshold : %.3f",
+            Config.RERANK_THRESHOLD,
+        )
+        logger.info(
+            "Kept      : %d document(s)",
+            len(filtered_documents),
+        )
+        logger.info(
+            "Removed   : %d document(s)",
+            len(documents) - len(filtered_documents),
         )
 
-        return results
+        # Keep only top_k after filtering
+        filtered_documents = filtered_documents[:top_k]
+
+        logger.info(
+            "Returning %d reranked document(s).",
+            len(filtered_documents),
+        )
+
+        return filtered_documents

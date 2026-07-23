@@ -3,6 +3,8 @@ Production RAG Chain using LCEL.
 
 Responsibilities:
 - Build context
+- Compress context
+- Rerank documents
 - Invoke GPT model
 - Maintain conversation memory
 - Return answer and sources
@@ -18,6 +20,7 @@ from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_openai import ChatOpenAI
 
 from rag.config import Config
+from rag.context_compressor import ContextCompressor
 from rag.logger import get_logger
 from rag.memory import ConversationMemory
 from rag.prompt import PromptFactory
@@ -41,6 +44,7 @@ class RAGChain:
         self.retriever = retriever
         self.reranker = reranker
         self.memory = memory
+        self.compressor = ContextCompressor()
 
         self.llm = ChatOpenAI(
             model=Config.CHAT_MODEL,
@@ -52,7 +56,32 @@ class RAGChain:
         self.chain = self._build_chain()
 
     # ---------------------------------------------------------
-    # Context Preparation
+    # Document Preparation
+    # ---------------------------------------------------------
+
+    def _prepare_documents(
+        self,
+        question: str,
+        documents: list[Document],
+    ) -> list[Document]:
+        """
+        Compress and rerank retrieved documents.
+        """
+
+        documents = self.compressor.compress(
+            question=question,
+            documents=documents,
+        )
+
+        documents = self.reranker.rerank(
+            question=question,
+            documents=documents,
+        )
+
+        return documents
+
+    # ---------------------------------------------------------
+    # Context Formatting
     # ---------------------------------------------------------
 
     def _prepare_context(
@@ -60,18 +89,12 @@ class RAGChain:
         inputs: dict,
     ) -> str:
         """
-        Prepare the context for the LLM.
+        Convert reranked documents into prompt context.
         """
 
-        question: str = inputs["question"]
-        documents: list[Document] = inputs["documents"]
-
-        documents = self.reranker.rerank(
-            question=question,
-            documents=documents,
+        return format_documents(
+            inputs["documents"]
         )
-
-        return format_documents(documents)
 
     # ---------------------------------------------------------
     # Conversation History
@@ -95,7 +118,6 @@ class RAGChain:
 
         context_chain = (
             RunnableParallel(
-                question=itemgetter("question"),
                 documents=itemgetter("documents"),
             )
             | RunnableLambda(self._prepare_context)
@@ -115,19 +137,43 @@ class RAGChain:
         )
 
     # ---------------------------------------------------------
-    # Ask
+    # Core Generation
     # ---------------------------------------------------------
 
-    def invoke(
+    def _generate(
         self,
         question: str,
         documents: list[Document],
-    ) -> str:
+    ) -> tuple[str, list[Document]]:
         """
-        Generate a complete answer.
+        Shared generation logic.
         """
 
-        logger.info("Question: %s", question)
+        logger.info(
+            "Question: %s",
+            question,
+        )
+
+        documents = self._prepare_documents(
+            question,
+            documents,
+        )
+
+        if not documents:
+
+            logger.warning(
+                "No document passed reranker threshold."
+            )
+
+            answer = (
+                "I couldn't find any relevant information "
+                "in the knowledge base to answer your question."
+            )
+
+            self.memory.add_user_message(question)
+            self.memory.add_ai_message(answer)
+
+            return answer, []
 
         answer = self.chain.invoke(
             {
@@ -139,7 +185,29 @@ class RAGChain:
         self.memory.add_user_message(question)
         self.memory.add_ai_message(answer)
 
-        logger.info("Answer generated.")
+        logger.info(
+            "Answer generated."
+        )
+
+        return answer, documents
+
+    # ---------------------------------------------------------
+    # Invoke
+    # ---------------------------------------------------------
+
+    def invoke(
+        self,
+        question: str,
+        documents: list[Document],
+    ) -> str:
+        """
+        Generate an answer only.
+        """
+
+        answer, _ = self._generate(
+            question,
+            documents,
+        )
 
         return answer
 
@@ -153,10 +221,26 @@ class RAGChain:
         documents: list[Document],
     ):
         """
-        Stream the generated answer chunk by chunk.
+        Stream the generated answer.
         """
 
-        logger.info("Streaming question: %s", question)
+        logger.info(
+            "Streaming question: %s",
+            question,
+        )
+
+        documents = self._prepare_documents(
+            question,
+            documents,
+        )
+
+        if not documents:
+
+            yield (
+                "I couldn't find any relevant information "
+                "in the knowledge base to answer your question."
+            )
+            return
 
         answer = ""
 
@@ -178,13 +262,15 @@ class RAGChain:
 
     def retrieve(
         self,
-        question: str,
+        questions: str | list[str],
     ) -> list[Document]:
         """
         Return retrieved documents only.
         """
 
-        return self.retriever.invoke(question)
+        return self.retriever.invoke(
+            questions
+        )
 
     # ---------------------------------------------------------
     # Answer + Sources
@@ -196,16 +282,19 @@ class RAGChain:
         documents: list[Document],
     ) -> dict:
         """
-        Return both answer and retrieved documents.
+        Return answer, documents, and sources.
         """
 
-        answer = self.invoke(
-            question=question,
-            documents=documents,
+        answer, documents = self._generate(
+            question,
+            documents,
         )
 
         return {
             "question": question,
             "answer": answer,
             "documents": documents,
+            "sources": self.retriever.sources(
+                documents
+            ),
         }

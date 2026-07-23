@@ -53,10 +53,16 @@ class Config:
 
     SEARCH_TYPE = "mmr"
 
+    # Default retrieval size.
+    # Adaptive Retrieval may override this value.
     TOP_K = 8
 
+    # Number of candidate documents fetched before MMR.
     FETCH_K = 20
 
+    # Diversity parameter for MMR.
+    # 0.0 = Maximum diversity
+    # 1.0 = Maximum relevance
     LAMBDA_MULT = 0.5
 
     # ------------------------------------------------------------------
@@ -65,7 +71,19 @@ class Config:
 
     RERANKER_MODEL = "BAAI/bge-reranker-base"
 
+    # Maximum documents kept after reranking.
     RERANK_TOP_K = 5
+
+    # Minimum CrossEncoder relevance score required
+    # for a document to be considered relevant.
+    RERANK_THRESHOLD = 0.05
+
+    # ------------------------------------------------------------------
+    # Response Cache
+    # ------------------------------------------------------------------
+
+    # Cache lifetime (seconds)
+    CACHE_TTL = 3600
 
     # ------------------------------------------------------------------
     # Logging

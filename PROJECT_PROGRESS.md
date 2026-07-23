@@ -1,78 +1,38 @@
-# Production-RAG Progress
+# Production AI Platform Progress
 
-## Repository
-Production-RAG
+## Current Features
+- Hybrid Retrieval ✅
+- BM25 ✅
+- Chroma ✅
+- Reciprocal Rank Fusion ✅
+- CrossEncoder Reranker ✅
+- Adaptive Retrieval ✅
+- Query Rewriter ✅
+- Conversation Memory ✅
+- Response Cache ✅
+- Groundedness Checker ✅
+- Website Crawler ✅
+- Incremental Indexing ✅
+
+## Knowledge Base
+- python_intro.md
+- python_basics.md
+- python_functions.md
+- python_decorators.md
+- python_oop.md
 
 ## Current Status
+Project builds successfully.
 
-### Completed
-- OpenAI Embeddings (text-embedding-3-small)
-- Chroma Vector Database
-- RecursiveCharacterTextSplitter
-- Website Crawler
-- Markdown Loader
-- Markdown Importer
-- Incremental Document Import
-- LCEL RAG Chain
-- Source Filtering
-- Streaming
-- Logging
-- Chunk Statistics
-- BM25 Retrieval
-- Hybrid Search (Vector + BM25)
-- Reciprocal Rank Fusion (RRF)
+Database creation works.
 
-## Current Pipeline
+Current task:
+Testing retrieval quality.
 
-Question
-↓
-Vector Search
-+
-BM25
-↓
-Reciprocal Rank Fusion
-↓
-GPT
-
-## Current Files
-- rag/application.py
-- rag/chain.py
-- rag/vector_store.py
-- rag/hybrid.py
-- rag/bm25.py
-- rag/fusion.py
-- rag/importer.py
-- rag/retriever.py
-- rag/splitter.py
-
-## NEXT TASK
-
-Implement Cross-Encoder Re-ranking.
-
-Goal:
-
-Question
-↓
-Vector Search
-+
-BM25
-↓
-RRF
-↓
-Cross Encoder
-↓
-Top 5 Documents
-↓
-GPT
-
-Important:
-Do NOT rewrite the project.
-Proceed one small step at a time.
-Always return complete files when modifications are required.
-Explain every change before coding.
-
-The next file to modify is:
-
-rag/chain.py
-
-Nothing else has been modified yet.
+Next tasks:
+- Evaluate answers
+- Improve prompts
+- Add evaluation metrics
+- Build FastAPI API
+- Dockerize
+- Deploy

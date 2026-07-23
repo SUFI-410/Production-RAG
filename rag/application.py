@@ -7,11 +7,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from rag.chain import RAGChain
+from rag.config import Config
 from rag.loader import DocumentLoader
 from rag.logger import get_logger
 from rag.memory import ConversationMemory
+from rag.multi_query import MultiQueryGenerator
 from rag.query_rewriter import QueryRewriter
 from rag.reranker import Reranker
+from rag.response_cache import ResponseCache
 from rag.vector_store import VectorStoreManager
 
 logger = get_logger(__name__)
@@ -31,6 +34,12 @@ class RAGApplication:
         self.memory = ConversationMemory()
 
         self.query_rewriter = QueryRewriter()
+
+        self.multi_query = MultiQueryGenerator()
+
+        self.cache = ResponseCache(
+            ttl_seconds=Config.CACHE_TTL,
+        )
 
         self.chain: RAGChain | None = None
 
@@ -55,6 +64,39 @@ class RAGApplication:
             reranker=self.reranker,
             memory=self.memory,
         )
+
+    def _prepare_question(
+        self,
+        question: str,
+    ) -> str:
+        """
+        Rewrite the question using conversation history
+        when history is available.
+        """
+
+        history = self.memory.formatted_history()
+
+        if not history.strip():
+            return question
+
+        return self.query_rewriter.rewrite(
+            question=question,
+            history=history,
+        )
+
+    def _cache_key(
+        self,
+        question: str,
+        metadata_filter: dict[str, str] | None,
+    ) -> str:
+        """
+        Build a cache key that also includes metadata filters.
+        """
+
+        if metadata_filter is None:
+            return question
+
+        return f"{question}|{sorted(metadata_filter.items())}"
 
     # ---------------------------------------------------------
     # Initialization
@@ -130,6 +172,7 @@ class RAGApplication:
 
         logger.info("Existing database loaded.")
 
+
     # ---------------------------------------------------------
     # Incremental Ingestion
     # ---------------------------------------------------------
@@ -150,6 +193,8 @@ class RAGApplication:
 
         self.chain = self._create_chain()
 
+        self.cache.clear()
+
         logger.info("PDF added successfully.")
 
     def add_pdfs(
@@ -168,6 +213,8 @@ class RAGApplication:
 
         self.chain = self._create_chain()
 
+        self.cache.clear()
+
         logger.info("PDFs added successfully.")
 
     def add_web(
@@ -185,6 +232,8 @@ class RAGApplication:
         self.vector_manager.add_documents(documents)
 
         self.chain = self._create_chain()
+
+        self.cache.clear()
 
         logger.info("Website added successfully.")
 
@@ -206,15 +255,29 @@ class RAGApplication:
                 "Application has not been initialized."
             )
 
-        history = self.memory.formatted_history()
+        rewritten_question = self._prepare_question(
+            question
+        )
 
-        rewritten_question = (
-            self.query_rewriter.rewrite(
-                question=question,
-                history=history,
+        cache_key = self._cache_key(
+            rewritten_question,
+            metadata_filter,
+        )
+
+        cached = self.cache.get(
+            cache_key
+        )
+
+        if cached is not None:
+
+            logger.info(
+                "Response cache hit."
             )
-            if history.strip()
-            else question
+
+            return cached["answer"]
+
+        queries = self.multi_query.generate(
+            rewritten_question
         )
 
         chain = (
@@ -223,13 +286,27 @@ class RAGApplication:
             else self._create_chain(metadata_filter)
         )
 
-        # Retrieve documents ONCE
-        documents = chain.retrieve(rewritten_question)
+        documents = chain.retrieve(
+            queries
+        )
 
-        return chain.invoke(
+        answer = chain.invoke(
             question=rewritten_question,
             documents=documents,
         )
+
+        self.cache.set(
+            cache_key,
+            {
+                "answer": answer,
+                "documents": documents,
+                "sources": chain.retriever.sources(
+                    documents
+                ),
+            },
+        )
+
+        return answer
 
     def ask_with_sources(
         self,
@@ -237,7 +314,7 @@ class RAGApplication:
         metadata_filter: dict[str, str] | None = None,
     ) -> dict:
         """
-        Return answer plus retrieved documents.
+        Return answer plus sources.
         """
 
         if self.chain is None:
@@ -245,15 +322,29 @@ class RAGApplication:
                 "Application has not been initialized."
             )
 
-        history = self.memory.formatted_history()
+        rewritten_question = self._prepare_question(
+            question
+        )
 
-        rewritten_question = (
-            self.query_rewriter.rewrite(
-                question=question,
-                history=history,
+        cache_key = self._cache_key(
+            rewritten_question,
+            metadata_filter,
+        )
+
+        cached = self.cache.get(
+            cache_key
+        )
+
+        if cached is not None:
+
+            logger.info(
+                "Response cache hit."
             )
-            if history.strip()
-            else question
+
+            return cached
+
+        queries = self.multi_query.generate(
+            rewritten_question
         )
 
         chain = (
@@ -262,13 +353,21 @@ class RAGApplication:
             else self._create_chain(metadata_filter)
         )
 
-        # Retrieve documents ONCE
-        documents = chain.retrieve(rewritten_question)
+        documents = chain.retrieve(
+            queries
+        )
 
-        return chain.ask(
+        result = chain.ask(
             question=rewritten_question,
             documents=documents,
         )
+
+        self.cache.set(
+            cache_key,
+            result,
+        )
+
+        return result
 
     # ---------------------------------------------------------
     # Database
@@ -280,6 +379,8 @@ class RAGApplication:
         """
 
         self.vector_manager.reset()
+
+        self.cache.clear()
 
     def database_size(self) -> int:
         """

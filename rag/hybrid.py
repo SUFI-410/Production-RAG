@@ -3,7 +3,9 @@ from __future__ import annotations
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableLambda
 
+from rag.adaptive_retrieval import AdaptiveRetrieval
 from rag.bm25 import BM25Retriever
+from rag.fusion import ReciprocalRankFusion
 from rag.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,8 +15,13 @@ class HybridRetriever(RunnableLambda):
     """
     Hybrid Retriever.
 
-    Combines semantic retrieval (Chroma)
-    with lexical retrieval (BM25).
+    Features
+    --------
+    - Multi Query Retrieval
+    - Chroma Search
+    - BM25 Search
+    - Reciprocal Rank Fusion
+    - Adaptive Retrieval (Dynamic Top-K)
     """
 
     def __init__(
@@ -25,43 +32,123 @@ class HybridRetriever(RunnableLambda):
 
         self.chroma = chroma_retriever
         self.bm25 = bm25_retriever
+        self.rrf = ReciprocalRankFusion()
+        self.adaptive = AdaptiveRetrieval()
 
-        super().__init__(self._retrieve)
+        super().__init__(self.retrieve)
 
-    def _retrieve(
+    # ---------------------------------------------------------
+    # Retrieve
+    # ---------------------------------------------------------
+
+    def retrieve(
         self,
-        query: str,
+        queries: str | list[str],
     ) -> list[Document]:
+        """
+        Retrieve documents using multiple queries and
+        combine the results with Reciprocal Rank Fusion.
+        """
 
-        semantic_docs = self.chroma.invoke(query)
+        if isinstance(queries, str):
+            queries = [queries]
 
-        keyword_docs = self.bm25.search(query)
+        # -----------------------------------------------------
+        # Adaptive Top-K
+        # -----------------------------------------------------
 
-        logger.info(
-            "Hybrid Retrieval: %s semantic + %s keyword",
-            len(semantic_docs),
-            len(keyword_docs),
+        top_k = self.adaptive.top_k(
+            queries[0]
         )
 
-        merged: list[Document] = []
-        seen: set[str] = set()
+        logger.info(
+            "Adaptive Retrieval Top-K = %d",
+            top_k,
+        )
 
-        for document in semantic_docs + keyword_docs:
+        ranked_lists: list[list[Document]] = []
+
+        for query in queries:
+
+            logger.info(
+                "Searching: %s",
+                query,
+            )
+
+            semantic_docs = self.chroma.invoke(query)
+
+            semantic_docs = semantic_docs[:top_k]
+
+            keyword_docs = self.bm25.search(query)
+
+            keyword_docs = keyword_docs[:top_k]
+
+            fused = self.rrf.fuse(
+                [
+                    semantic_docs,
+                    keyword_docs,
+                ],
+                top_k=top_k,
+            )
+
+            ranked_lists.append(fused)
+
+        documents = self.rrf.fuse(
+            ranked_lists,
+            top_k=top_k,
+        )
+
+        logger.info(
+            "Hybrid Retriever returned %d document(s).",
+            len(documents),
+        )
+
+        return documents
+
+    # ---------------------------------------------------------
+    # Sources
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def sources(
+        documents: list[Document],
+    ) -> list[dict]:
+        """
+        Extract unique document sources.
+        """
+
+        seen: set[tuple[str, str]] = set()
+        results: list[dict] = []
+
+        for document in documents:
+
+            source = document.metadata.get(
+                "source",
+                "Unknown",
+            )
+
+            page = str(
+                document.metadata.get(
+                    "page",
+                    "-",
+                )
+            )
 
             key = (
-                document.metadata.get("source", "")
-                + str(document.metadata.get("start_index", ""))
+                source,
+                page,
             )
 
             if key in seen:
                 continue
 
             seen.add(key)
-            merged.append(document)
 
-        logger.info(
-            "Hybrid Retrieval: %s merged documents",
-            len(merged),
-        )
+            results.append(
+                {
+                    "source": source,
+                    "page": page,
+                }
+            )
 
-        return merged
+        return results

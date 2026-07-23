@@ -14,6 +14,8 @@ from rag.logger import get_logger
 
 logger = get_logger(__name__)
 
+_embeddings: Embeddings | None = None
+
 
 class EmbeddingFactory:
     """
@@ -33,9 +35,7 @@ class EmbeddingFactory:
 
         embeddings = OpenAIEmbeddings(
             model=Config.EMBEDDING_MODEL,
-            api_key=Config.OPENAI_API_KEY,
             max_retries=3,
-            request_timeout=Config.REQUEST_TIMEOUT,
         )
 
         logger.info(
@@ -43,3 +43,16 @@ class EmbeddingFactory:
         )
 
         return embeddings
+
+
+def get_embeddings() -> Embeddings:
+    """
+    Return a singleton embedding model.
+    """
+
+    global _embeddings
+
+    if _embeddings is None:
+        _embeddings = EmbeddingFactory.create()
+
+    return _embeddings

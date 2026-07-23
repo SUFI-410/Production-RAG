@@ -5,6 +5,7 @@ Supports:
 - Vector retrieval
 - Hybrid retrieval
 - Reciprocal Rank Fusion
+- Multi-query retrieval
 """
 
 from __future__ import annotations
@@ -38,39 +39,52 @@ class Retriever:
 
     def retrieve(
         self,
-        question: str,
+        questions: str | list[str],
     ) -> list[Document]:
 
+        if isinstance(questions, str):
+            questions = [questions]
+
         logger.info(
-            "Searching: %s",
-            question,
+            "Running retrieval for %d querie(s).",
+            len(questions),
         )
 
-        # -----------------------------
-        # Vector Search
-        # -----------------------------
+        ranked_lists: list[list[Document]] = []
 
-        vector_docs = self.vector_retriever.invoke(
-            question
-        )
+        for question in questions:
 
-        # -----------------------------
-        # Hybrid Search
-        # -----------------------------
+            logger.info(
+                "Searching: %s",
+                question,
+            )
 
-        if self.hybrid_search is not None:
+            # ---------------------------------
+            # Vector Search
+            # ---------------------------------
 
-            bm25_docs = self.hybrid_search.search(
+            vector_docs = self.vector_retriever.invoke(
                 question
             )
 
-            documents = self.rrf.fuse(
-                [vector_docs, bm25_docs]
-            )
+            # ---------------------------------
+            # Hybrid Search
+            # ---------------------------------
 
-        else:
+            if self.hybrid_search is not None:
 
-            documents = vector_docs
+                bm25_docs = self.hybrid_search.search(
+                    question
+                )
+
+                ranked_lists.append(vector_docs)
+                ranked_lists.append(bm25_docs)
+
+            else:
+
+                ranked_lists.append(vector_docs)
+
+        documents = self.rrf.fuse(ranked_lists)
 
         if not documents:
 
@@ -79,7 +93,7 @@ class Retriever:
             )
 
         logger.info(
-            "Retrieved %s document(s).",
+            "Retrieved %d fused document(s).",
             len(documents),
         )
 
@@ -105,7 +119,7 @@ class Retriever:
         ):
 
             logger.info(
-                "[%s]\n%s\n",
+                "[%d]\n%s\n",
                 i,
                 document.page_content[:300],
             )
@@ -121,8 +135,8 @@ class Retriever:
         documents: list[Document],
     ) -> list[dict]:
 
-        seen = set()
-        results = []
+        seen: set[tuple[str, str]] = set()
+        results: list[dict] = []
 
         for document in documents:
 
@@ -131,9 +145,11 @@ class Retriever:
                 "Unknown",
             )
 
-            page = document.metadata.get(
-                "page",
-                "-",
+            page = str(
+                document.metadata.get(
+                    "page",
+                    "-",
+                )
             )
 
             key = (
