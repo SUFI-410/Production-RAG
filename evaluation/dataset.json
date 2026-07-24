@@ -1,0 +1,100 @@
+[
+    {
+        "id": 1,
+        "question": "What is Python?",
+        "expected_documents": [
+            "python_intro.md"
+        ]
+    },
+    {
+        "id": 2,
+        "question": "Why should I learn Python?",
+        "expected_documents": [
+            "python_intro.md"
+        ]
+    },
+    {
+        "id": 3,
+        "question": "Explain Python variables.",
+        "expected_documents": [
+            "python_basics.md"
+        ]
+    },
+    {
+        "id": 4,
+        "question": "What are Python data types?",
+        "expected_documents": [
+            "python_basics.md"
+        ]
+    },
+    {
+        "id": 5,
+        "question": "Explain Python loops.",
+        "expected_documents": [
+            "python_basics.md"
+        ]
+    },
+    {
+        "id": 6,
+        "question": "What is a Python function?",
+        "expected_documents": [
+            "python_functions.md"
+        ]
+    },
+    {
+        "id": 7,
+        "question": "Explain *args and **kwargs.",
+        "expected_documents": [
+            "python_functions.md"
+        ]
+    },
+    {
+        "id": 8,
+        "question": "What is recursion in Python?",
+        "expected_documents": [
+            "python_functions.md"
+        ]
+    },
+    {
+        "id": 9,
+        "question": "What is object-oriented programming in Python?",
+        "expected_documents": [
+            "python_oop.md"
+        ]
+    },
+    {
+        "id": 10,
+        "question": "Explain polymorphism.",
+        "expected_documents": [
+            "python_oop.md"
+        ]
+    },
+    {
+        "id": 11,
+        "question": "What is inheritance?",
+        "expected_documents": [
+            "python_oop.md"
+        ]
+    },
+    {
+        "id": 12,
+        "question": "What is a Python decorator?",
+        "expected_documents": [
+            "python_decorators.md"
+        ]
+    },
+    {
+        "id": 13,
+        "question": "Why are decorators useful?",
+        "expected_documents": [
+            "python_decorators.md"
+        ]
+    },
+    {
+        "id": 14,
+        "question": "Explain Python decorators with an example.",
+        "expected_documents": [
+            "python_decorators.md"
+        ]
+    }
+]
